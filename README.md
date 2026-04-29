@@ -21,17 +21,74 @@ An AI-enhanced Web Application Firewall (WAF) implemented as a reverse proxy com
 
 ## Architecture
 
-```
-Client → [Proxy Layer] → [Detection Layer] → [Data Layer] → Upstream Server
-                ↓
-         [Dashboard (WebSocket)]
+The system follows a layered architecture designed for high performance, modularity, and security.
+
+```mermaid
+graph TD
+    Client((Client)) -->|Request| Proxy[WAF Proxy]
+    Proxy -->|TLS & Metadata| Extract[Extract Metadata]
+    
+    subgraph Pre-Checks
+        Extract --> BL{Blacklist}
+        BL -->|Banned| 403[403 Forbidden]
+        BL -->|Clean| RL{Rate Limit}
+        RL -->|Exceeded| 429[429 Too Many Requests]
+        RL -->|Allowed| Engine[Detection Engine]
+    end
+
+    subgraph Detection Strategies
+        Engine --> Sig[Signature Matcher]
+        Engine --> Beh[Behavior Analyzer]
+        Engine --> ML[ML Classifier]
+        Engine --> Zero[Zero-Day / DDoS]
+    end
+
+    Sig --> Agg[Weighted Aggregation]
+    Beh --> Agg
+    ML --> Agg
+    Zero --> Agg
+    
+    Agg --> Score{Score > 0.5?}
+    Score -->|Yes| Block[Log & Auto-Sig & Block]
+    Score -->|No| Fwd[Forward to Upstream]
+    
+    Fwd --> Upstream((Upstream Server))
+    Block --> Client
+    
+    Data[(SQLite / Redis)]
+    Dash((Dashboard))
+    
+    Proxy -.-> Data
+    Agg -.-> Data
+    Proxy <-->|WebSocket| Dash
 ```
 
-**Detection Pipeline:**
-1. Blacklist Check → Whitelist Check → Rate Limit Check
-2. Signature Analysis → Behavioral Analysis → ML Classification
-3. Weighted Aggregation (AI agents 1.5x, standard 1.0x)
-4. Decision (Block if threat score > 0.5) → Log + Auto-Signature → 403 or Forward
+### Core Layers
+
+#### 1. Proxy Layer (`main.py`, `proxy.py`)
+- **Entry Point:** Intercepts all incoming HTTP/HTTPS requests.
+- **TLS Termination:** Handles SSL/TLS decryption for deep packet inspection.
+- **Metadata Extraction:** Parses HTTP method, path, query string, headers, and a 500-byte body preview.
+- **Forwarding:** Injects `X-WAF-Analyzed` header and forwards clean traffic to the upstream server via HTTPX.
+- **IP Extraction:** Identifies real client IP via `X-Forwarded-For` or socket address.
+
+#### 2. Detection Engine (`strategies/`, `ml_model.py`)
+Executes strategies in parallel to minimize latency:
+- **Signature Matcher:** Checks request against **106 patterns** across **9 categories** (SQLi, XSS, Command Injection, etc.) using regex.
+- **Behavior Analyzer:** Monitors per-IP request frequency and path diversity using sliding windows to detect scanning and brute-force.
+- **ML Classifier:** Logistic Regression model analyzing **8 traffic features** for probabilistic classification.
+- **Zero-Day / DDoS:** Statistical entropy analysis for unknown threats and multi-layered flood mitigation (per-IP and global limits).
+- **Aggregation:** Combines strategy results using weighted scoring (AI agents 1.5x, standard 1.0x). **Decision:** Block if Threat Score > 0.5.
+
+#### 3. Data Layer (`database.py`, `async_database.py`, `redis_cache.py`)
+- **Async SQLite:** Uses `aiosqlite` with a connection pool (max 10 connections).
+- **Batch Writer:** Accumulates logs in memory and flushes to disk every **5 seconds** to reduce I/O overhead.
+- **Redis Cache:** Optional distributed storage for rate limiting and blacklist synchronization with automatic in-memory fallback.
+
+#### 4. Presentation Layer (`static/dashboard.html`)
+- **Real-time Dashboard:** A comprehensive web interface with 9 analytical tabs (Overview, Logs, Blacklist, ML, etc.).
+- **WebSocket:** Streams live request logs and security events to the UI with sub-second latency.
+- **REST API:** Provides endpoints for configuration, historical data retrieval, and threat analytics.
 
 ## Tech Stack
 
