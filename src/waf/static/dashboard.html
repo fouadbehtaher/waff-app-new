@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-WAF Dynamic Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --danger: #ef4444;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --purple: #a855f7;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg-primary); color: var(--text-primary); padding: 20px; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--bg-card); margin-bottom: 30px; flex-wrap: wrap; gap: 12px; }
+        .header h1 { font-size: 28px; }
+        .header-actions { display: flex; gap: 12px; align-items: center; }
+        .btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 2px solid var(--bg-card); padding-bottom: 8px; overflow-x: auto; }
+        .tab { padding: 10px 20px; cursor: pointer; border-radius: 8px 8px 0 0; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+        .tab.active { background: var(--bg-secondary); color: var(--accent); border-bottom: 2px solid var(--accent); }
+        .tab:hover { background: var(--bg-card); }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+        .status-dot.disconnected { background: var(--danger); }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card { background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid var(--bg-card); }
+        .card .label { font-size: 14px; color: var(--text-secondary); margin-bottom: 8px; }
+        .card .value { font-size: 36px; font-weight: bold; }
+        .card .subtext { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+        .charts { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .chart-container { background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid var(--bg-card); }
+        .chart-container h3 { margin-bottom: 16px; font-size: 16px; color: var(--text-secondary); }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .log-container, .panel { background: var(--bg-secondary); padding: 24px; border-radius: 12px; border: 1px solid var(--bg-card); }
+        .log-container h3, .panel h3 { margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+        table { width: 100%; border-collapse: collapse; }
+        th { text-align: left; padding: 12px; background: var(--bg-card); color: var(--text-secondary); font-size: 12px; font-weight: 600; text-transform: uppercase; }
+        td { padding: 12px; border-bottom: 1px solid var(--bg-card); font-size: 14px; }
+        tr:hover { background: rgba(59, 130, 246, 0.1); }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+        .badge-block { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+        .badge-allow { background: rgba(34, 197, 94, 0.2); color: var(--success); }
+        .badge-limited { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .threat-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+        .threat-none { background: rgba(34, 197, 94, 0.2); color: var(--success); }
+        .threat-low { background: rgba(59, 130, 246, 0.2); color: var(--accent); }
+        .threat-medium { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+        .threat-high { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+        .threat-critical { background: rgba(168, 85, 247, 0.2); color: #a855f7; }
+        .ip-list { max-height: 400px; overflow-y: auto; }
+        .ip-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; background: var(--bg-card); border-radius: 8px; margin-bottom: 8px; }
+        .ip-item .info { flex: 1; }
+        .ip-item .ip { font-weight: 600; color: var(--warning); }
+        .ip-item .detail { color: var(--text-secondary); font-size: 13px; }
+        .ip-item .actions { display: flex; gap: 6px; }
+        .progress-bar { width: 100%; height: 8px; background: var(--bg-card); border-radius: 4px; overflow: hidden; margin-top: 4px; }
+        .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+        .progress-safe { background: var(--success); }
+        .progress-warn { background: var(--warning); }
+        .progress-danger { background: var(--danger); }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; margin-bottom: 4px; color: var(--text-secondary); font-size: 14px; }
+        .form-group input, .form-group select { width: 100%; padding: 10px; background: var(--bg-card); border: 1px solid var(--bg-card); border-radius: 8px; color: var(--text-primary); font-size: 14px; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 100; justify-content: center; align-items: center; }
+        .modal.open { display: flex; }
+        .modal-content { background: var(--bg-secondary); padding: 32px; border-radius: 16px; width: 400px; max-width: 90vw; }
+        .modal-content h3 { margin-bottom: 20px; }
+        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+        .strategy-stat { background: var(--bg-card); border-radius: 8px; padding: 16px; margin-bottom: 8px; }
+        .strategy-stat .name { font-weight: 600; margin-bottom: 8px; }
+        .strategy-stat .row { display: flex; justify-content: space-between; font-size: 13px; color: var(--text-secondary); }
+        @media (max-width: 1024px) { .charts, .grid-2 { grid-template-columns: 1fr; } }
+        .mono { font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div style="display:flex;align-items:center;gap:16px;">
+            <img src="/static/waf-logo.svg" alt="WAF Logo" style="width:64px;height:64px;">
+            <div>
+                <h1>AI-WAF Dashboard</h1>
+                <p style="color:var(--text-secondary);font-size:14px;margin-top:4px;">AI-Powered Web Application Firewall</p>
+            </div>
+        </div>
+        <div class="header-actions">
+            <button class="btn btn-primary" onclick="loadSampleData()" id="seed-btn">Load Sample Data</button>
+            <button class="btn btn-danger" onclick="showBanModal()">Ban IP</button>
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div class="status-dot" id="ws-status"></div>
+                <span id="ws-status-text" style="font-size:14px;color:var(--text-secondary);">Connecting...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="cards">
+        <div class="card"><div class="label">Total Requests</div><div class="value" id="total-requests">0</div><div class="subtext">All analyzed</div></div>
+        <div class="card"><div class="label">Blocked</div><div class="value" id="blocked" style="color:var(--danger)">0</div><div class="subtext" id="block-rate">0% blocked</div></div>
+        <div class="card"><div class="label">Allowed</div><div class="value" id="allowed" style="color:var(--success)">0</div><div class="subtext">Clean traffic</div></div>
+        <div class="card"><div class="label">IPs Blacklisted</div><div class="value" id="blacklisted-count" style="color:var(--purple)">0</div><div class="subtext">Auto + manual bans</div></div>
+        <div class="card"><div class="label">Rate Limited</div><div class="value" id="rate-limited-count" style="color:var(--warning)">0</div><div class="subtext">Anti brute-force</div></div>
+        <div class="card"><div class="label">Avg Analysis</div><div class="value" id="avg-time">0ms</div><div class="subtext">Per request</div></div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('overview')">Overview</div>
+        <div class="tab" onclick="switchTab('logs')">Live Logs</div>
+        <div class="tab" onclick="switchTab('blacklist')">IP Blacklist</div>
+        <div class="tab" onclick="switchTab('ratelimits')">Rate Limits</div>
+        <div class="tab" onclick="switchTab('strategies')">Strategies</div>
+        <div class="tab" onclick="switchTab('ml')">ML Model</div>
+        <div class="tab" onclick="switchTab('auto-sigs')">Auto-Signatures</div>
+        <div class="tab" onclick="switchTab('tls')">TLS/SSL</div>
+        <div class="tab" onclick="switchTab('settings')">Settings</div>
+    </div>
+
+    <div id="tab-overview" class="tab-content active">
+        <div class="charts">
+            <div class="chart-container"><h3>Request Timeline (60 min)</h3><canvas id="timeline-chart"></canvas></div>
+            <div class="chart-container"><h3>Threat Distribution</h3><canvas id="threat-chart"></canvas></div>
+        </div>
+        <div class="grid-3">
+            <div class="panel"><h3>Security Overview</h3><div id="security-overview">Loading...</div></div>
+            <div class="panel"><h3>Top Blocked IPs</h3><div id="top-blocked-ips">Loading...</div></div>
+            <div class="panel"><h3>Top Blocked Paths</h3><div id="top-blocked-paths">Loading...</div></div>
+        </div>
+    </div>
+
+    <div id="tab-logs" class="tab-content">
+        <div class="log-container">
+            <h3>Live Request Log <span id="log-status" style="font-size:14px;color:var(--text-secondary);font-weight:400;">Connecting...</span></h3>
+            <div class="log-filters" style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+                <input id="log-filter-ip" placeholder="Filter by IP" style="flex:1;min-width:150px;padding:10px;background:var(--bg-card);border:1px solid var(--bg-card);border-radius:8px;color:var(--text-primary);font-size:13px;" oninput="applyLogFilters()">
+                <input id="log-filter-path" placeholder="Filter by path" style="flex:2;min-width:200px;padding:10px;background:var(--bg-card);border:1px solid var(--bg-card);border-radius:8px;color:var(--text-primary);font-size:13px;" oninput="applyLogFilters()">
+                <select id="log-filter-decision" style="min-width:120px;padding:10px;background:var(--bg-card);border:1px solid var(--bg-card);border-radius:8px;color:var(--text-primary);font-size:13px;" onchange="applyLogFilters()">
+                    <option value="">All Decisions</option>
+                    <option value="block">Blocked</option>
+                    <option value="allow">Allowed</option>
+                </select>
+                <select id="log-filter-threat" style="min-width:120px;padding:10px;background:var(--bg-card);border:1px solid var(--bg-card);border-radius:8px;color:var(--text-primary);font-size:13px;" onchange="applyLogFilters()">
+                    <option value="">All Threats</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                    <option value="none">None</option>
+                </select>
+                <button class="btn btn-sm btn-primary" onclick="loadLogs()">Refresh</button>
+                <button class="btn btn-sm" onclick="clearLogs()" style="background:var(--bg-card);color:var(--text-secondary);">Clear</button>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <span id="log-count" style="font-size:13px;color:var(--text-secondary);">0 entries</span>
+                <button class="btn btn-sm btn-primary" id="load-more-btn" onclick="loadMoreLogs()" style="display:none;">Load More</button>
+            </div>
+            <table><thead><tr><th>Time</th><th>Method</th><th>Path</th><th>IP</th><th>Decision</th><th>Threat</th><th>Conf</th></tr></thead><tbody id="log-body"></tbody></table>
+        </div>
+    </div>
+
+    <div id="tab-blacklist" class="tab-content">
+        <div class="grid-2">
+            <div class="panel">
+                <h3>Blacklist Stats</h3><div id="blacklist-stats">Loading...</div>
+            </div>
+            <div class="panel">
+                <h3>Ban IP</h3>
+                <div class="form-group"><label>IP Address</label><input id="ban-ip" placeholder="e.g. 192.168.1.100"></div>
+                <div class="form-group"><label>Reason</label><input id="ban-reason" placeholder="e.g. Repeated attacks"></div>
+                <div class="form-group"><label><input type="checkbox" id="ban-permanent"> Permanent ban</label></div>
+                <button class="btn btn-danger" onclick="executeBan()">Ban IP</button>
+            </div>
+        </div>
+        <div class="panel" style="margin-top:20px;">
+            <h3>Blocked IPs</h3>
+            <div class="ip-list" id="blacklist-ips">Loading...</div>
+        </div>
+    </div>
+
+    <div id="tab-ratelimits" class="tab-content">
+        <div class="grid-2">
+            <div class="panel">
+                <h3>Rate Limiter Stats</h3><div id="rl-stats">Loading...</div>
+            </div>
+            <div class="panel">
+                <h3>Check IP</h3>
+                <div style="display:flex;gap:8px;">
+                    <input id="rl-check-ip" placeholder="IP address" style="flex:1;padding:10px;background:var(--bg-card);border:1px solid var(--bg-card);border-radius:8px;color:var(--text-primary);">
+                    <button class="btn btn-primary" onclick="checkIPRate()">Check</button>
+                </div>
+                <div id="rl-ip-info" style="margin-top:12px;"></div>
+            </div>
+        </div>
+        <div class="panel" style="margin-top:20px;">
+            <h3>Top IPs by Request Count</h3>
+            <div id="rl-top-ips">Loading...</div>
+        </div>
+    </div>
+
+    <div id="tab-strategies" class="tab-content">
+        <div class="grid-3" id="strategy-stats">Loading...</div>
+    </div>
+
+    <div id="tab-ml" class="tab-content">
+        <div class="grid-2">
+            <div class="panel">
+                <h3>ML Model Info</h3><div id="ml-model-info">Loading...</div>
+            </div>
+            <div class="panel">
+                <h3>Train Model</h3>
+                <div class="form-group"><label>Epochs</label><input id="ml-epochs" type="number" value="100"></div>
+                <div class="form-group"><label>Learning Rate</label><input id="ml-lr" type="number" step="0.001" value="0.01"></div>
+                <button class="btn btn-primary" onclick="trainMLModel()">Train Model</button>
+                <div id="ml-train-result" style="margin-top:12px;"></div>
+            </div>
+        </div>
+        <div class="panel" style="margin-top:20px;">
+            <h3>Predict Request</h3>
+            <div style="display:flex;gap:8px;">
+                <input id="ml-predict-path" placeholder="/api/users?id=1" style="flex:1;padding:10px;background:var(--bg-card);border:1px solid var(--bg-card);border-radius:8px;color:var(--text-primary);">
+                <button class="btn btn-primary" onclick="predictML()">Predict</button>
+            </div>
+            <div id="ml-predict-result" style="margin-top:12px;"></div>
+        </div>
+    </div>
+
+    <div id="tab-auto-sigs" class="tab-content">
+        <div class="grid-2">
+            <div class="panel">
+                <h3>Auto-Signature Stats</h3><div id="auto-sig-stats">Loading...</div>
+            </div>
+            <div class="panel">
+                <h3>Analyze Blocked Requests</h3>
+                <button class="btn btn-primary" onclick="analyzeSignatures()">Analyze & Generate</button>
+                <div id="auto-sig-result" style="margin-top:12px;"></div>
+            </div>
+        </div>
+        <div class="panel" style="margin-top:20px;">
+            <h3>Generated Signatures</h3>
+            <div id="auto-sig-list">Loading...</div>
+        </div>
+    </div>
+
+    <div id="tab-tls" class="tab-content">
+        <div class="grid-2">
+            <div class="panel">
+                <h3>TLS/SSL Configuration</h3><div id="tls-info">Loading...</div>
+            </div>
+            <div class="panel">
+                <h3>Generate Self-Signed Certificate</h3>
+                <div class="form-group"><label>Validity (days)</label><input id="tls-days" type="number" value="365"></div>
+                <button class="btn btn-primary" onclick="generateTLSCert()">Generate Certificate</button>
+                <div id="tls-gen-result" style="margin-top:12px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-settings" class="tab-content">
+        <div class="grid-2">
+            <div class="panel">
+                <h3>Strategies</h3>
+                <div id="settings-strategies">Loading...</div>
+            </div>
+            <div class="panel">
+                <h3>Rate Limiting</h3>
+                <div class="form-group"><label>Max Requests</label><input id="cfg-rl-max" type="number" value="100"></div>
+                <div class="form-group"><label>Window (seconds)</label><input id="cfg-rl-window" type="number" value="60"></div>
+                <button class="btn btn-primary" onclick="saveRateLimit()">Save</button>
+            </div>
+        </div>
+        <div class="grid-2" style="margin-top:20px;">
+            <div class="panel">
+                <h3>IP Blacklist</h3>
+                <div class="form-group"><label>Auto-ban Threshold</label><input id="cfg-bl-threshold" type="number" value="5"></div>
+                <div class="form-group"><label>Ban Duration (minutes)</label><input id="cfg-bl-duration" type="number" value="60"></div>
+                <button class="btn btn-primary" onclick="saveBlacklist()">Save</button>
+            </div>
+            <div class="panel">
+                <h3>Whitelist IPs</h3>
+                <div style="display:flex;gap:8px;"><input id="cfg-wl-ip" placeholder="IP address" style="flex:1;padding:10px;background:var(--bg-card);border:1px solid var(--bg-card);border-radius:8px;color:var(--text-primary);"><button class="btn btn-success" onclick="addWhitelistIP()">Add</button></div>
+                <div id="wl-ips-list" style="margin-top:12px;"></div>
+            </div>
+        </div>
+        <div class="panel" style="margin-top:20px;">
+            <h3>Signature Categories</h3>
+            <div id="settings-categories" class="grid-3">Loading...</div>
+        </div>
+        <div style="margin-top:20px;display:flex;gap:12px;">
+            <button class="btn btn-danger" onclick="resetConfig()">Reset to Defaults</button>
+            <button class="btn btn-primary" onclick="loadConfig()">Refresh Config</button>
+        </div>
+    </div>
+
+    <div class="modal" id="ban-modal">
+        <div class="modal-content">
+            <h3>Quick Ban IP</h3>
+            <div class="form-group"><label>IP Address</label><input id="quick-ban-ip" placeholder="e.g. 10.0.0.1"></div>
+            <div class="form-group"><label>Reason</label><input id="quick-ban-reason" value="Suspicious activity"></div>
+            <div class="modal-actions">
+                <button class="btn" style="background:var(--bg-card);color:var(--text-primary);" onclick="closeBanModal()">Cancel</button>
+                <button class="btn btn-danger" onclick="executeQuickBan()">Ban</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws, timelineChart, threatChart;
+
+        function initCharts() {
+            const tc = document.getElementById('timeline-chart').getContext('2d');
+            timelineChart = new Chart(tc, { type: 'line', data: { labels: [], datasets: [{ label: 'Allowed', data: [], borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', fill: true, tension: 0.4 }, { label: 'Blocked', data: [], borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, tension: 0.4 }] }, options: { responsive: true, plugins: { legend: { labels: { color: '#94a3b8' } } }, scales: { x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }, y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } } } } });
+            const dc = document.getElementById('threat-chart').getContext('2d');
+            threatChart = new Chart(dc, { type: 'doughnut', data: { labels: ['None', 'Low', 'Medium', 'High', 'Critical'], datasets: [{ data: [0,0,0,0,0], backgroundColor: ['#22c55e','#3b82f6','#f59e0b','#ef4444','#a855f7'], borderWidth: 0 }] }, options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } } });
+        }
+
+        function switchTab(name) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            document.getElementById('tab-' + name).classList.add('active');
+            if (name === 'blacklist') loadBlacklist();
+            if (name === 'ratelimits') loadRateLimits();
+            if (name === 'strategies') loadStrategies();
+            if (name === 'ml') loadMLModel();
+            if (name === 'auto-sigs') loadAutoSignatures();
+            if (name === 'tls') loadTLSInfo();
+            if (name === 'settings') loadSettings();
+        }
+
+        async function loadAll() {
+            try {
+                const [summary, overview] = await Promise.all([
+                    fetch('/dashboard/summary').then(r => r.json()),
+                    fetch('/security/overview').then(r => r.json())
+                ]);
+                updateCards(summary, overview);
+                updateSecurityOverview(overview);
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadTimeline() {
+            try {
+                const data = await fetch('/dashboard/timeline?minutes=60').then(r => r.json());
+                if (!data || data.length === 0) return;
+                timelineChart.data.labels = data.map(d => `-${d.minute}m`);
+                timelineChart.data.datasets[0].data = data.map(d => d.allowed);
+                timelineChart.data.datasets[1].data = data.map(d => d.blocked);
+                timelineChart.update('none');
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadThreats() {
+            try {
+                const summary = await fetch('/dashboard/summary').then(r => r.json());
+                const threatOrder = ['none','low','medium','high','critical'];
+                const data = threatOrder.map(t => (summary.threat_levels && summary.threat_levels[t]) || 0);
+                threatChart.data.datasets[0].data = data;
+                threatChart.update('none');
+            } catch (e) { console.error(e); }
+        }
+
+        let allLogs = [];
+        let logOffset = 0;
+        const LOG_BATCH = 50;
+
+        async function loadLogs(reset = true) {
+            try {
+                if (reset) { allLogs = []; logOffset = 0; }
+                const logs = await fetch(`/dashboard/logs?limit=${LOG_BATCH}&offset=${logOffset}`).then(r => r.json());
+                if (!logs || logs.length === 0) {
+                    document.getElementById('load-more-btn').style.display = 'none';
+                    if (reset) document.getElementById('log-body').innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);">No logs found</td></tr>';
+                    return;
+                }
+                if (reset) allLogs = logs;
+                else allLogs = allLogs.concat(logs);
+                logOffset += logs.length;
+                renderFilteredLogs();
+                document.getElementById('load-more-btn').style.display = logs.length >= LOG_BATCH ? 'inline-block' : 'none';
+            } catch (e) { console.error(e); }
+        }
+
+        function loadMoreLogs() { loadLogs(false); }
+
+        function clearLogs() {
+            allLogs = [];
+            logOffset = 0;
+            document.getElementById('log-body').innerHTML = '';
+            document.getElementById('log-count').textContent = '0 entries';
+            document.getElementById('load-more-btn').style.display = 'none';
+            document.getElementById('log-filter-ip').value = '';
+            document.getElementById('log-filter-path').value = '';
+            document.getElementById('log-filter-decision').value = '';
+            document.getElementById('log-filter-threat').value = '';
+        }
+
+        function applyLogFilters() { renderFilteredLogs(); }
+
+        function renderFilteredLogs() {
+            const ipFilter = document.getElementById('log-filter-ip').value.toLowerCase().trim();
+            const pathFilter = document.getElementById('log-filter-path').value.toLowerCase().trim();
+            const decisionFilter = document.getElementById('log-filter-decision').value;
+            const threatFilter = document.getElementById('log-filter-threat').value;
+
+            const filtered = allLogs.filter(l => {
+                if (ipFilter && !l.source_ip.toLowerCase().includes(ipFilter)) return false;
+                if (pathFilter && !l.path.toLowerCase().includes(pathFilter)) return false;
+                if (decisionFilter && l.decision !== decisionFilter) return false;
+                if (threatFilter && l.threat_level !== threatFilter) return false;
+                return true;
+            });
+
+            const tbody = document.getElementById('log-body');
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-secondary);">No matching logs</td></tr>';
+            } else {
+                tbody.innerHTML = filtered.map(l => createLogRow(l)).join('');
+            }
+            document.getElementById('log-count').textContent = `${filtered.length} of ${allLogs.length} entries`;
+        }
+
+        function createLogRow(l) {
+            return `<tr><td>${new Date(l.timestamp).toLocaleTimeString()}</td><td>${l.method}</td><td class="mono" style="color:var(--accent)">${l.path}</td><td class="mono" style="color:var(--warning)">${l.source_ip}</td><td><span class="badge ${l.decision === 'block' ? 'badge-block' : 'badge-allow'}">${l.decision.toUpperCase()}</span></td><td><span class="threat-badge threat-${l.threat_level}">${l.threat_level.toUpperCase()}</span></td><td>${(l.confidence * 100).toFixed(0)}%</td></tr>`;
+        }
+
+        async function loadBlacklist() {
+            try {
+                const [stats, list] = await Promise.all([
+                    fetch('/security/blacklist/stats').then(r => r.json()),
+                    fetch('/security/blacklist').then(r => r.json())
+                ]);
+                document.getElementById('blacklist-stats').innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div class="card" style="padding:16px;"><div class="label">Total Blacklisted</div><div class="value" style="font-size:24px;">${stats.total_blacklisted}</div></div><div class="card" style="padding:16px;"><div class="label">Active Bans</div><div class="value" style="font-size:24px;color:var(--danger);">${stats.active_bans}</div></div><div class="card" style="padding:16px;"><div class="label">Permanent</div><div class="value" style="font-size:24px;color:var(--purple);">${stats.permanent_bans}</div></div><div class="card" style="padding:16px;"><div class="label">IPs Tracked</div><div class="value" style="font-size:24px;">${stats.total_ips_tracked}</div></div></div>`;
+                document.getElementById('blacklist-ips').innerHTML = list.length === 0 ? '<p style="color:var(--text-secondary);">No IPs blacklisted</p>' : list.map(e => `<div class="ip-item"><div class="info"><div class="ip mono">${e.ip}</div><div class="detail">${e.reason} | ${e.violation_count} violations | ${e.permanent ? 'Permanent' : (e.remaining_seconds ? Math.floor(e.remaining_seconds/60) + ' min left' : 'Expired')}</div></div><div class="actions"><button class="btn btn-sm btn-success" onclick="unbanIP('${e.ip}')">Unban</button></div></div>`).join('');
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadRateLimits() {
+            try {
+                const stats = await fetch('/security/rate-limits').then(r => r.json());
+                document.getElementById('rl-stats').innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div class="card" style="padding:16px;"><div class="label">Limit</div><div class="value" style="font-size:24px;">${stats.limit} req</div><div class="subtext">per ${stats.window_seconds}s</div></div><div class="card" style="padding:16px;"><div class="label">Blocked</div><div class="value" style="font-size:24px;color:var(--warning);">${stats.blocked_total}</div></div></div>`;
+                const topIPs = await fetch('/security/rate-limits/top-ips?limit=15').then(r => r.json());
+                document.getElementById('rl-top-ips').innerHTML = topIPs.length === 0 ? '<p style="color:var(--text-secondary);">No active requests</p>' : topIPs.map(ip => {
+                    const pct = (ip.requests / stats.limit) * 100;
+                    const barClass = pct > 80 ? 'progress-danger' : pct > 50 ? 'progress-warn' : 'progress-safe';
+                    return `<div class="ip-item"><div class="info"><div class="ip mono">${ip.ip}</div><div class="detail">${ip.requests} requests | ${ip.remaining} remaining</div><div class="progress-bar"><div class="progress-fill ${barClass}" style="width:${pct}%"></div></div></div></div>`;
+                }).join('');
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadStrategies() {
+            try {
+                const stats = await fetch('/dashboard/strategies').then(r => r.json());
+                document.getElementById('strategy-stats').innerHTML = stats.length === 0 ? '<p>No strategy data</p>' : stats.map(s => {
+                    const patterns = Object.entries(s.patterns_detected || {}).map(([k,v]) => `${k} (${v})`).join('<br>') || 'None';
+                    return `<div class="strategy-stat"><div class="name">${s.name}</div><div class="row"><span>Total: ${s.total}</span><span style="color:var(--danger)">Blocked: ${s.blocked}</span><span style="color:var(--success)">Allowed: ${s.allowed}</span></div>${patterns ? `<div style="margin-top:8px;font-size:12px;color:var(--text-secondary);">Patterns: ${patterns}</div>` : ''}</div>`;
+                }).join('');
+            } catch (e) { console.error(e); }
+        }
+
+        async function loadSettings() {
+            try {
+                const cfg = await fetch('/waf/config').then(r => r.json());
+                const strategies = cfg.strategies || {};
+                document.getElementById('settings-strategies').innerHTML = Object.entries(strategies).map(([name, s]) => {
+                    const isOn = s.enabled;
+                    return `<div class="ip-item"><div class="info"><div class="name">${name}</div><div class="detail">${isOn ? 'Active' : 'Disabled'}</div></div><div class="actions"><button class="btn btn-sm ${isOn ? 'btn-danger' : 'btn-success'}" onclick="toggleStrategy('${name}', ${!isOn})">${isOn ? 'Disable' : 'Enable'}</button></div></div>`;
+                }).join('');
+
+                const cats = strategies.signature?.categories || {};
+                document.getElementById('settings-categories').innerHTML = Object.entries(cats).map(([cat, on]) => {
+                    return `<div class="ip-item"><div class="info"><div class="name">${cat.replace(/_/g,' ').toUpperCase()}</div><div class="detail">${on ? 'Active' : 'Disabled'}</div></div><div class="actions"><button class="btn btn-sm ${on ? 'btn-danger' : 'btn-success'}" onclick="toggleCategory('${cat}', ${!on})">${on ? 'Disable' : 'Enable'}</button></div></div>`;
+                }).join('');
+
+                const rl = cfg.rate_limiting || {};
+                document.getElementById('cfg-rl-max').value = rl.max_requests || 100;
+                document.getElementById('cfg-rl-window').value = rl.window_seconds || 60;
+
+                const bl = cfg.ip_blacklist || {};
+                document.getElementById('cfg-bl-threshold').value = bl.auto_ban_threshold || 5;
+                document.getElementById('cfg-bl-duration').value = bl.ban_duration_minutes || 60;
+
+                const wlIps = cfg.whitelist?.ips || [];
+                document.getElementById('wl-ips-list').innerHTML = wlIps.length === 0 ? '<p style="color:var(--text-secondary);">No whitelisted IPs</p>' : wlIps.map(ip => `<div class="ip-item"><div class="info"><div class="ip mono">${ip}</div></div><div class="actions"><button class="btn btn-sm btn-danger" onclick="removeWhitelistIP('${ip}')">Remove</button></div></div>`).join('');
+            } catch (e) { console.error(e); }
+        }
+
+        async function toggleStrategy(name, enabled) {
+            await fetch(`/waf/config/strategy/${name}/toggle?enabled=${enabled}`, { method: 'POST' });
+            loadSettings();
+        }
+
+        async function toggleCategory(cat, enabled) {
+            await fetch('/waf/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({updates: {strategies: {signature: {categories: {[cat]: enabled}}}}}) });
+            loadSettings();
+        }
+
+        async function saveRateLimit() {
+            const max = document.getElementById('cfg-rl-max').value;
+            const window = document.getElementById('cfg-rl-window').value;
+            await fetch('/waf/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({updates: {rate_limiting: {max_requests: parseInt(max), window_seconds: parseInt(window)}}}) });
+            alert('Rate limit updated');
+        }
+
+        async function saveBlacklist() {
+            const threshold = document.getElementById('cfg-bl-threshold').value;
+            const duration = document.getElementById('cfg-bl-duration').value;
+            await fetch('/waf/config', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({updates: {ip_blacklist: {auto_ban_threshold: parseInt(threshold), ban_duration_minutes: parseInt(duration)}}}) });
+            alert('Blacklist settings updated');
+        }
+
+        async function addWhitelistIP() {
+            const ip = document.getElementById('cfg-wl-ip').value;
+            if (!ip) return;
+            await fetch(`/waf/config/whitelist/ip/${ip}`, { method: 'POST' });
+            document.getElementById('cfg-wl-ip').value = '';
+            loadSettings();
+        }
+
+        async function removeWhitelistIP(ip) {
+            await fetch(`/waf/config/whitelist/ip/${ip}`, { method: 'DELETE' });
+            loadSettings();
+        }
+
+        async function resetConfig() {
+            if (!confirm('Reset all WAF settings to defaults?')) return;
+            await fetch('/waf/config/reset', { method: 'POST' });
+            loadSettings();
+        }
+
+        async function loadConfig() { loadSettings(); }
+
+        function updateCards(summary, overview) {
+            document.getElementById('total-requests').textContent = summary.total_requests;
+            document.getElementById('blocked').textContent = summary.blocked;
+            document.getElementById('allowed').textContent = summary.allowed;
+            document.getElementById('block-rate').textContent = summary.block_rate + '% blocked';
+            document.getElementById('avg-time').textContent = summary.avg_analysis_time_ms + 'ms';
+            document.getElementById('blacklisted-count').textContent = (overview && overview.blacklist && overview.blacklist.total_blacklisted) || 0;
+            document.getElementById('rate-limited-count').textContent = (overview && overview.rate_limiter && overview.rate_limiter.blocked_total) || 0;
+        }
+
+        function updateSecurityOverview(overview) {
+            if (!overview) return;
+            const bl = overview.blacklist || {};
+            const rl = overview.rate_limiter || {};
+            const wm = overview.waf_metrics || {};
+            document.getElementById('security-overview').innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div class="card" style="padding:12px;"><div class="label">Active Bans</div><div class="value" style="font-size:20px;color:var(--danger);">${bl.active_bans || 0}</div></div><div class="card" style="padding:12px;"><div class="label">Perm Bans</div><div class="value" style="font-size:20px;color:var(--purple);">${bl.permanent_bans || 0}</div></div><div class="card" style="padding:12px;"><div class="label">Rate Blocks</div><div class="value" style="font-size:20px;color:var(--warning);">${rl.blocked_total || 0}</div></div><div class="card" style="padding:12px;"><div class="label">Unique IPs</div><div class="value" style="font-size:20px;">${rl.unique_ips || 0}</div></div></div>`;
+
+            const topIPs = (summary => summary.top_blocked_ips || [])({});
+            fetch('/dashboard/summary').then(r => r.json()).then(s => {
+                document.getElementById('top-blocked-ips').innerHTML = (s.top_blocked_ips || []).slice(0,5).map(ip => `<div class="ip-item"><div class="info"><div class="ip mono">${ip.ip}</div><div class="detail">${ip.count} blocks</div></div></div>`).join('') || '<p style="color:var(--text-secondary);">No blocked IPs</p>';
+                document.getElementById('top-blocked-paths').innerHTML = (s.top_blocked_paths || []).slice(0,5).map(p => `<div class="ip-item"><div class="info"><div class="ip mono" style="color:var(--accent);font-size:12px;">${p.path}</div><div class="detail">${p.count} blocks</div></div></div>`).join('') || '<p style="color:var(--text-secondary);">No blocked paths</p>';
+            });
+        }
+
+        async function loadSampleData() {
+            try {
+                const btn = document.getElementById('seed-btn');
+                btn.textContent = 'Loading...'; btn.disabled = true;
+                const res = await fetch('/dashboard/seed', { method: 'POST' });
+                const data = await res.json();
+                if (data.status === 'sample_data_loaded' || data.status === 'data_already_loaded') {
+                    btn.textContent = `Loaded (${data.entries || 'sample'})`;
+                    await loadAll(); await loadTimeline(); await loadThreats(); await loadLogs();
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function showBanModal() { document.getElementById('ban-modal').classList.add('open'); }
+        function closeBanModal() { document.getElementById('ban-modal').classList.remove('open'); }
+
+        async function executeBan() {
+            const ip = document.getElementById('ban-ip').value;
+            const reason = document.getElementById('ban-reason').value;
+            const permanent = document.getElementById('ban-permanent').checked;
+            if (!ip) return alert('Enter IP');
+            await fetch('/security/blacklist', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ip, reason, permanent}) });
+            document.getElementById('ban-ip').value = '';
+            loadBlacklist(); loadAll();
+        }
+
+        async function executeQuickBan() {
+            const ip = document.getElementById('quick-ban-ip').value;
+            const reason = document.getElementById('quick-ban-reason').value;
+            if (!ip) return alert('Enter IP');
+            await fetch('/security/blacklist', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ip, reason, permanent: false}) });
+            closeBanModal(); loadBlacklist(); loadAll();
+        }
+
+        async function unbanIP(ip) { await fetch('/security/blacklist/' + ip, { method: 'DELETE' }); loadBlacklist(); loadAll(); }
+
+        async function checkIPRate() {
+            const ip = document.getElementById('rl-check-ip').value;
+            if (!ip) return;
+            const info = await fetch('/security/rate-limits/' + ip).then(r => r.json());
+            const pct = ((info.requests / 100) * 100).toFixed(0);
+            document.getElementById('rl-ip-info').innerHTML = `<div class="card" style="padding:16px;margin-top:8px;"><div class="row" style="display:flex;justify-content:space-between;"><span>Requests: ${info.requests}/100</span><span>Remaining: ${info.remaining}</span></div><div class="progress-bar" style="margin-top:8px;"><div class="progress-fill ${pct > 80 ? 'progress-danger' : pct > 50 ? 'progress-warn' : 'progress-safe'}" style="width:${Math.min(pct,100)}%"></div></div><div class="subtext" style="margin-top:4px;">Reset in ${info.reset_seconds}s</div></div>`;
+        }
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+            ws.onopen = () => {
+                document.getElementById('ws-status').classList.remove('disconnected');
+                document.getElementById('ws-status-text').textContent = 'Live';
+                document.getElementById('log-status').textContent = 'Live';
+                document.getElementById('log-status').style.color = 'var(--success)';
+            };
+            ws.onclose = () => {
+                document.getElementById('ws-status').classList.add('disconnected');
+                document.getElementById('ws-status-text').textContent = 'Disconnected';
+                document.getElementById('log-status').textContent = 'Disconnected';
+                document.getElementById('log-status').style.color = 'var(--danger)';
+                setTimeout(connectWebSocket, 3000);
+            };
+            ws.onmessage = (e) => {
+                const d = JSON.parse(e.data);
+                if (d.timestamp) {
+                    addLiveEntry(d);
+                    updateCardsFromEntry(d);
+                }
+            };
+        }
+
+        function addLiveEntry(entry) {
+            allLogs.unshift(entry);
+            renderFilteredLogs();
+        }
+
+        function updateCardsFromEntry(entry) {
+            const totalEl = document.getElementById('total-requests');
+            totalEl.textContent = parseInt(totalEl.textContent) + 1;
+            if (entry.decision === 'block') {
+                const blockedEl = document.getElementById('blocked');
+                blockedEl.textContent = parseInt(blockedEl.textContent) + 1;
+            } else {
+                const allowedEl = document.getElementById('allowed');
+                allowedEl.textContent = parseInt(allowedEl.textContent) + 1;
+            }
+        }
+
+        async function loadMLModel() {
+            try {
+                const info = await fetch('/ml/model').then(r => r.json());
+                document.getElementById('ml-model-info').innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div class="card" style="padding:12px;"><div class="label">Trained</div><div class="value" style="font-size:20px;color:${info.trained ? 'var(--success)' : 'var(--danger)'};">${info.trained ? 'Yes' : 'No'}</div></div><div class="card" style="padding:12px;"><div class="label">Accuracy</div><div class="value" style="font-size:20px;">${(info.accuracy * 100).toFixed(1)}%</div></div><div class="card" style="padding:12px;"><div class="label">Samples</div><div class="value" style="font-size:20px;">${info.samples_trained}</div></div><div class="card" style="padding:12px;"><div class="label">Features</div><div class="value" style="font-size:20px;">${info.feature_names.length}</div></div></div>`;
+            } catch (e) { console.error(e); }
+        }
+
+        async function trainMLModel() {
+            const epochs = parseInt(document.getElementById('ml-epochs').value) || 100;
+            const lr = parseFloat(document.getElementById('ml-lr').value) || 0.01;
+            const resultDiv = document.getElementById('ml-train-result');
+            resultDiv.innerHTML = '<p style="color:var(--warning);">Training...</p>';
+            try {
+                const res = await fetch('/ml/train', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({epochs, learning_rate: lr}) });
+                const data = await res.json();
+                if (data.status === 'trained') {
+                    resultDiv.innerHTML = `<div class="card" style="padding:12px;"><div class="label">Training Complete</div><div>Accuracy: ${(data.accuracy * 100).toFixed(1)}% | Samples: ${data.samples} | Loss: ${data.loss.toFixed(4)}</div></div>`;
+                    loadMLModel();
+                } else {
+                    resultDiv.innerHTML = `<p style="color:var(--danger);">${data.message || 'No training data'}</p>`;
+                }
+            } catch (e) { resultDiv.innerHTML = `<p style="color:var(--danger);">Error: ${e.message}</p>`; }
+        }
+
+        async function predictML() {
+            const path = document.getElementById('ml-predict-path').value;
+            if (!path) return;
+            const resultDiv = document.getElementById('ml-predict-result');
+            try {
+                const res = await fetch(`/ml/predict`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({path}) });
+                const data = await res.json();
+                const pred = data.prediction;
+                resultDiv.innerHTML = `<div class="card" style="padding:12px;"><div class="label">Prediction</div><div class="value" style="font-size:20px;color:${pred.is_malicious ? 'var(--danger)' : 'var(--success)'};">${pred.is_malicious ? 'MALICIOUS' : 'CLEAN'}</div><div>Confidence: ${(pred.confidence * 100).toFixed(1)}%</div></div>`;
+            } catch (e) { resultDiv.innerHTML = `<p style="color:var(--danger);">Error: ${e.message}</p>`; }
+        }
+
+        async function loadAutoSignatures() {
+            try {
+                const [stats, rules] = await Promise.all([fetch('/auto-signatures/stats').then(r => r.json()), fetch('/auto-signatures').then(r => r.json())]);
+                document.getElementById('auto-sig-stats').innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div class="card" style="padding:12px;"><div class="label">Total</div><div class="value" style="font-size:20px;">${stats.total}</div></div><div class="card" style="padding:12px;"><div class="label">Approved</div><div class="value" style="font-size:20px;color:var(--success);">${stats.approved}</div></div><div class="card" style="padding:12px;"><div class="label">Pending</div><div class="value" style="font-size:20px;color:var(--warning);">${stats.pending}</div></div><div class="card" style="padding:12px;"><div class="label">Rejected</div><div class="value" style="font-size:20px;color:var(--danger);">${stats.rejected}</div></div></div>`;
+                document.getElementById('auto-sig-list').innerHTML = rules.length === 0 ? '<p style="color:var(--text-secondary);">No signatures generated yet</p>' : rules.slice(0, 20).map((r, i) => `<div class="ip-item"><div class="info"><div class="ip">${r.category} - ${r.name}</div><div class="detail mono" style="font-size:11px;">${r.pattern}</div><div class="detail">Status: <span class="badge ${r.status === 'approved' ? 'badge-allow' : r.status === 'rejected' ? 'badge-block' : 'badge-limited'}">${r.status}</span> | Confidence: ${(r.confidence * 100).toFixed(0)}%</div></div><div class="actions">${r.status === 'pending_review' ? `<button class="btn btn-sm btn-success" onclick="approveSig(${i})">Approve</button><button class="btn btn-sm btn-danger" onclick="rejectSig(${i})">Reject</button>` : ''}<button class="btn btn-sm btn-danger" onclick="deleteSig(${i})">Delete</button></div></div>`).join('');
+            } catch (e) { console.error(e); }
+        }
+
+        async function analyzeSignatures() {
+            const resultDiv = document.getElementById('auto-sig-result');
+            resultDiv.innerHTML = '<p style="color:var(--warning);">Analyzing...</p>';
+            try {
+                const res = await fetch('/auto-signatures/analyze', { method: 'POST' });
+                const data = await res.json();
+                resultDiv.innerHTML = `<div class="card" style="padding:12px;"><div class="label">Analysis Complete</div><div>New patterns: ${data.new_patterns}</div></div>`;
+                loadAutoSignatures();
+            } catch (e) { resultDiv.innerHTML = `<p style="color:var(--danger);">Error: ${e.message}</p>`; }
+        }
+
+        async function approveSig(idx) { await fetch(`/auto-signatures/${idx}/approve`, { method: 'POST' }); loadAutoSignatures(); }
+        async function rejectSig(idx) { await fetch(`/auto-signatures/${idx}/reject`, { method: 'POST' }); loadAutoSignatures(); }
+        async function deleteSig(idx) { await fetch(`/auto-signatures/${idx}`, { method: 'DELETE' }); loadAutoSignatures(); }
+
+        async function loadTLSInfo() {
+            try {
+                const info = await fetch('/tls/info').then(r => r.json());
+                document.getElementById('tls-info').innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"><div class="card" style="padding:12px;"><div class="label">Configured</div><div class="value" style="font-size:20px;color:${info.configured ? 'var(--success)' : 'var(--danger)'};">${info.configured ? 'Yes' : 'No'}</div></div><div class="card" style="padding:12px;"><div class="label">Context Ready</div><div class="value" style="font-size:20px;color:${info.context_ready ? 'var(--success)' : 'var(--warning)'};">${info.context_ready ? 'Yes' : 'No'}</div></div></div><div style="margin-top:12px;"><div class="detail">Cert: ${info.cert_path || 'Not set'}</div><div class="detail">Key: ${info.key_path || 'Not set'}</div><div class="detail">CA: ${info.ca_path || 'Not set'}</div></div>`;
+            } catch (e) { console.error(e); }
+        }
+
+        async function generateTLSCert() {
+            const days = parseInt(document.getElementById('tls-days').value) || 365;
+            const resultDiv = document.getElementById('tls-gen-result');
+            resultDiv.innerHTML = '<p style="color:var(--warning);">Generating...</p>';
+            try {
+                const res = await fetch('/tls/generate-cert', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({days}) });
+                const data = await res.json();
+                if (data.status === 'generated') {
+                    resultDiv.innerHTML = `<div class="card" style="padding:12px;"><div class="label">Certificate Generated</div><div>Cert: ${data.cert_path}</div><div>Key: ${data.key_path}</div><div>Valid for: ${data.days} days</div></div>`;
+                    loadTLSInfo();
+                } else {
+                    resultDiv.innerHTML = `<p style="color:var(--danger);">${data.message}</p>`;
+                }
+            } catch (e) { resultDiv.innerHTML = `<p style="color:var(--danger);">Error: ${e.message}</p>`; }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initCharts(); loadAll(); loadTimeline(); loadThreats(); loadLogs(); connectWebSocket();
+            setInterval(loadAll, 15000); setInterval(loadTimeline, 30000); setInterval(loadLogs, 30000);
+        });
+    </script>
+</body>
+</html>

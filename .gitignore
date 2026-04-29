@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Environment Variables
+.env
+.env.local
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+*.sqlite3
+
+# ML Model
+src/waf/ml_model/waf_model.json
+
+# Auto-signatures
+src/waf/auto_signatures.json
+
+# Certificates
+src/waf/certs/*.pem
+src/waf/certs/*.key
+src/waf/certs/*.crt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pytest
+.pytest_cache/
+
+# Azure
+.azure/

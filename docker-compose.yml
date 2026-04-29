@@ -1,0 +1,51 @@
+version: "3.8"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  waf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - UPSTREAM_URL=${UPSTREAM_URL:-http://upstream:8080}
+      - REDIS_URL=redis://redis:6379/0
+      - USE_REDIS=true
+      - USE_ASYNC_DB=true
+      - TLS_CERT_PATH=/app/certs/waf.crt
+      - TLS_KEY_PATH=/app/certs/waf.key
+      - DEBUG=false
+    volumes:
+      - waf_data:/app/data
+      - ./certs:/app/certs
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  upstream:
+    image: hashicorp/http-echo
+    ports:
+      - "8080:5678"
+    command: ["-text", "Hello from upstream!"]
+    profiles:
+      - demo
+
+volumes:
+  redis_data:
+  waf_data:

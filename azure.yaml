@@ -1,0 +1,9 @@
+name: ai-waf
+services:
+  waf-api:
+    project: ./src/waf
+    host: containerapp
+    language: python
+    docker:
+      path: ../../Dockerfile
+      context: ../../
