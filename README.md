@@ -104,53 +104,43 @@ Executes strategies in parallel to minimize latency:
 | **Testing** | pytest 8.0+, pytest-asyncio |
 | **Deployment** | Docker, Docker Compose, GitHub Actions |
 
-## Quick Start
+## Quick Start (Windows)
 
-### Prerequisites
-- Python 3.12 or higher
-- Docker & Docker Compose (optional, for containerized deployment)
-
-### Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/fouadbehtaher/waff-app-new.git
-cd waff-app-new
-```
-
-2. Create a virtual environment and install dependencies:
-```bash
+### 1. Setup & Installation
+Open PowerShell in your project folder and run:
+```powershell
+# Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+.\venv\Scripts\Activate.ps1
+
+# Install dependencies
 pip install -r src/waf/requirements.txt
-pip install -r tests/requirements-test.txt
+
+# Create config file
+Copy-Item .env.example .env
 ```
 
-3. Configure environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your configuration
+### 2. Run Upstream Server (For Testing)
+Open a **new** PowerShell window and run a dummy server on port 8080:
+```powershell
+python -m http.server 8080
 ```
+*(Keep this window open)*
 
-4. Run the WAF server:
-```bash
+### 3. Run the WAF
+In your main PowerShell window, start the WAF:
+```powershell
 cd src/waf
 python main.py
 ```
+You should see: `INFO: Uvicorn running on http://0.0.0.0:8000`
 
-The WAF will start on `http://localhost:8000` (or `https://localhost:8443` if TLS is configured).
+### 4. Test & Verify
+- **Open Dashboard:** [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
+- **Test Safe Request:** Visit [http://localhost:8000/](http://localhost:8000/) → You should see `200 OK`.
+- **Test Attack:** Visit [http://localhost:8000/?id=1' OR 1=1--](http://localhost:8000/?id=1' OR 1=1--) → You should see `403 Forbidden` and a "BLOCK" entry in the dashboard.
 
-### Docker Deployment
-
-```bash
-docker-compose up -d
-```
-
-### Dashboard Access
-
-Open your browser and navigate to:
-- `http://localhost:8000/dashboard` (HTTP)
-- `https://localhost:8443/dashboard` (HTTPS)
+![AI-WAF Dashboard Screenshot](dashboard.png)
 
 ## Configuration
 
