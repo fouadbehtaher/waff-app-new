@@ -136,11 +136,13 @@ python main.py
 You should see: `INFO: Uvicorn running on http://0.0.0.0:8000`
 
 ### 4. Test & Verify
-- **Open Dashboard:** [http://localhost:8000/dashboard](http://localhost:8000/dashboard)
-- **Test Safe Request:** Visit [http://localhost:8000/](http://localhost:8000/) → You should see `200 OK`.
-- **Test Attack:** Visit [http://localhost:8000/?id=1' OR 1=1--](http://localhost:8000/?id=1' OR 1=1--) → You should see `403 Forbidden` and a "BLOCK" entry in the dashboard.
+- **Open Dashboard:** [http://localhost:8000/](http://localhost:8000/) (the WAF serves the dashboard at `/`).
+- **Test Safe Request:** Visit [http://localhost:8000/index.html](http://localhost:8000/index.html). The WAF forwards it to the upstream server, so you see the upstream's response (a 404 if that server has no such file).
+- **Test Attack:** Visit [http://localhost:8000/search?id=1' OR 1=1--](http://localhost:8000/search?id=1' OR 1=1--) → You should see `403 Forbidden` and a "BLOCK" entry in the dashboard. (Requests to `/` itself are answered by the dashboard and never reach the proxy.)
 
 ![AI-WAF Dashboard Screenshot](dashboard.png)
+
+*Local demo run: the dashboard counted 11 requests, 3 blocked and 8 allowed. They were 10 scripted requests (6 normal page requests and 4 attack-pattern requests) and one load of the dashboard page itself, which the app serves locally. One of the four attack patterns was not blocked and passed through to the upstream test server, so this is a demo, not a detection benchmark. The Request Timeline chart does not draw correctly in this version.*
 
 ## Configuration
 
