@@ -37,7 +37,7 @@ jobs:
       - name: Run tests
         run: |
           cd src/waf
-          PYTHONPATH=. python -m pytest ../../tests/ -v --tb=short --cov=. --cov-report=xml
+          PYTHONPATH=.:../.. python -m pytest ../../tests/ -v --tb=short --cov=. --cov-report=xml
         env:
           OPENAI_API_KEY: ""
 
