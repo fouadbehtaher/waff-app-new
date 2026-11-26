@@ -1,7 +1,11 @@
+import asyncio
+import sys
+
 import pytest
 
 
 @pytest.fixture
 def event_loop_policy():
-    import asyncio
-    return asyncio.WindowsProactorEventLoopPolicy()
+    if sys.platform == "win32":
+        return asyncio.WindowsProactorEventLoopPolicy()
+    return asyncio.DefaultEventLoopPolicy()
